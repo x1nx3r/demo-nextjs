@@ -17,11 +17,14 @@ export type S3Config = {
 };
 
 export function readS3Config(): S3Config | null {
-  const endpoint = process.env.S3_ENDPOINT;
-  const region = process.env.S3_REGION ?? "us-east-1";
-  const bucket = process.env.S3_BUCKET;
-  const accessKeyId = process.env.S3_ACCESS_KEY_ID;
-  const secretAccessKey = process.env.S3_SECRET_ACCESS_KEY;
+  const endpoint = process.env.RUSTFS_ENDPOINT ?? process.env.S3_ENDPOINT;
+  const region =
+    process.env.RUSTFS_REGION ?? process.env.S3_REGION ?? "us-east-1";
+  const bucket = process.env.RUSTFS_BUCKET ?? process.env.S3_BUCKET;
+  const accessKeyId =
+    process.env.RUSTFS_ACCESS_KEY ?? process.env.S3_ACCESS_KEY_ID;
+  const secretAccessKey =
+    process.env.RUSTFS_SECRET_KEY ?? process.env.S3_SECRET_ACCESS_KEY;
 
   if (!endpoint || !bucket || !accessKeyId || !secretAccessKey) {
     return null;
@@ -40,7 +43,7 @@ export function getS3Client(): S3Client {
   const config = readS3Config();
   if (!config) {
     throw new Error(
-      "RustFS/S3 is not configured. Set S3_ENDPOINT, S3_BUCKET, S3_ACCESS_KEY_ID and S3_SECRET_ACCESS_KEY.",
+      "RustFS/S3 is not configured. Set RUSTFS_ENDPOINT, RUSTFS_BUCKET, RUSTFS_ACCESS_KEY and RUSTFS_SECRET_KEY.",
     );
   }
 

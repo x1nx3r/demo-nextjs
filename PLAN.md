@@ -42,9 +42,9 @@ Deployed on Vercel; storage and all state live in a **self-hosted RustFS**
   never corrupts a chapter — it just stops and resumes.
 - **Auth**: a single hardcoded-user gate (`Udin` / `Password123!`) keeps the app and
   our credits from being open to the world. Dev-only; replace before public launch.
-- Secrets live only in server env / route handlers: `S3_ENDPOINT`,
-  `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY`, `S3_BUCKET`, `ELEVENLABS_API_KEY`,
-  `OPENCODE_API_KEY`. Never `NEXT_PUBLIC_`.
+- Secrets live only in server env / route handlers: `RUSTFS_ENDPOINT`,
+  `RUSTFS_REGION`, `RUSTFS_BUCKET`, `RUSTFS_ACCESS_KEY`, `RUSTFS_SECRET_KEY`,
+  `AUTH_SECRET`, `ELEVENLABS_API_KEY`, `OPENCODE_API_KEY`. Never `NEXT_PUBLIC_`.
 
 ## 3. Stack
 
@@ -242,5 +242,6 @@ src/lib/budget.ts             monthly char meter (settings.json)
 1. Auth when going public: Auth.js (self-hosted) vs Clerk (managed). (Hardcoded gate
    is fine for now.)
 2. Default voice + reading settings for v1.
-3. RustFS details to wire env: endpoint URL, bucket name, region, and whether it is
-   publicly reachable or private (affects proxy vs presigned URLs).
+
+Resolved: RustFS endpoint `https://cdn.x1nx3r.dev` (public via Cloudflare), bucket
+`audiobook`, region `us-east-1`. Bucket creation pending a valid access key.
