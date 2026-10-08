@@ -14,6 +14,22 @@ export const chapterTextKey = (bookId: string, idx: number) =>
   `books/${bookId}/chapters/${idx}/text.json`;
 export const chapterChunksKey = (bookId: string, idx: number) =>
   `books/${bookId}/chapters/${idx}/chunks.json`;
+export const chapterScriptKey = (bookId: string, idx: number) =>
+  `books/${bookId}/chapters/${idx}/script.json`;
+export const chapterAudioKey = (bookId: string, idx: number) =>
+  `books/${bookId}/chapters/${idx}/audio.mp3`;
+
+/** Voice bible for a book: narrator plus recurring characters. */
+export const bookCastKey = (bookId: string) => `books/${bookId}/cast.json`;
+
+/** Optional character/alias reference the user pastes at import. */
+export const bookContextKey = (bookId: string) => `books/${bookId}/context.md`;
+
+/** Optional free-form direction for the Director (e.g. "this is the 86 novel"). */
+export const bookDirectionKey = (bookId: string) => `books/${bookId}/direction.txt`;
+
+/** Cached mediawiki_lookup result, keyed by a hash of site + mode + query. */
+export const bookWikiKey = (bookId: string, hash: string) => `books/${bookId}/wiki/${hash}.json`;
 
 export const jobKey = (bookId: string, idx: number) =>
   `jobs/${bookId}/${idx}.json`;

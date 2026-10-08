@@ -2,7 +2,9 @@ import { randomUUID } from "node:crypto";
 
 import { parseEpub, type ParsedParagraph } from "@/lib/epub/parse";
 import {
+  bookContextKey,
   bookCoverKey,
+  bookDirectionKey,
   bookMetaKey,
   bookSourceKey,
   chapterTextKey,
@@ -11,7 +13,7 @@ import {
 
 import { listKeys } from "@/lib/storage/s3";
 
-import { deletePrefix, getJson, putBytes, putJson } from "./objects";
+import { deletePrefix, getJson, getText, putBytes, putJson, putText } from "./objects";
 
 export type ChapterStatus =
   | "imported"
@@ -26,6 +28,10 @@ export type ChapterMeta = {
   title: string;
   charCount: number;
   status: ChapterStatus;
+  /** Number of render units, set once the chapter is planned. */
+  unitCount?: number;
+  /** Units rendered so far, updated as convert progresses. */
+  unitsDone?: number;
 };
 
 export type BookMeta = {
@@ -60,6 +66,41 @@ export async function getBook(id: string): Promise<BookMeta | null> {
   return getJson<BookMeta>(bookMetaKey(id));
 }
 
+/** Optional character/alias reference the user pasted at import. */
+export async function getBookContext(bookId: string): Promise<string | null> {
+  return getText(bookContextKey(bookId));
+}
+
+export async function setBookContext(bookId: string, context: string): Promise<void> {
+  await putText(bookContextKey(bookId), context);
+}
+
+/** Optional free-form direction for the Director. */
+export async function getBookDirection(bookId: string): Promise<string | null> {
+  return getText(bookDirectionKey(bookId));
+}
+
+export async function setBookDirection(bookId: string, direction: string): Promise<void> {
+  await putText(bookDirectionKey(bookId), direction);
+}
+
+/** Update one chapter's status/summary fields and persist the book meta. */
+export async function patchChapter(
+  bookId: string,
+  idx: number,
+  patch: Partial<Pick<ChapterMeta, "status" | "unitCount" | "unitsDone">>,
+): Promise<BookMeta | null> {
+  const book = await getBook(bookId);
+  if (!book) return null;
+
+  const chapter = book.chapters.find((entry) => entry.idx === idx);
+  if (!chapter) return null;
+
+  Object.assign(chapter, patch);
+  await putJson(bookMetaKey(bookId), book);
+  return book;
+}
+
 export async function getChapterText(
   bookId: string,
   idx: number,
@@ -67,7 +108,11 @@ export async function getChapterText(
   return getJson<ChapterText>(chapterTextKey(bookId, idx));
 }
 
-export async function createBookFromEpub(data: Uint8Array): Promise<BookMeta> {
+export async function createBookFromEpub(
+  data: Uint8Array,
+  context?: string,
+  direction?: string,
+): Promise<BookMeta> {
   const parsed = await parseEpub(data);
   const id = randomUUID();
   const createdAt = new Date().toISOString();
@@ -75,6 +120,14 @@ export async function createBookFromEpub(data: Uint8Array): Promise<BookMeta> {
   await putBytes(bookSourceKey(id), data, "application/epub+zip");
   if (parsed.cover) {
     await putBytes(bookCoverKey(id), parsed.cover.data, parsed.cover.contentType);
+  }
+  const reference = context?.trim();
+  if (reference) {
+    await putText(bookContextKey(id), reference);
+  }
+  const storyDirection = direction?.trim();
+  if (storyDirection) {
+    await putText(bookDirectionKey(id), storyDirection);
   }
 
   const chapters: ChapterMeta[] = [];

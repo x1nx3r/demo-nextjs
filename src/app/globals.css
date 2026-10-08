@@ -7,9 +7,9 @@
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
+  --font-sans: var(--font-inter);
   --font-mono: var(--font-geist-mono);
-  --font-heading: var(--font-geist-sans);
+  --font-heading: var(--font-inter);
   --color-sidebar-ring: var(--sidebar-ring);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
@@ -45,6 +45,22 @@
   --color-popover: var(--popover);
   --color-card-foreground: var(--card-foreground);
   --color-card: var(--card);
+
+  /* Spotify extras */
+  --color-surface-mid: var(--surface-mid);
+  --color-surface-card: var(--surface-card);
+  --color-surface-card-alt: var(--surface-card-alt);
+  --color-surface-light: var(--surface-light);
+  --color-brand: var(--brand-green);
+  --color-brand-border: var(--brand-green-border);
+  --color-border-light: var(--border-light);
+  --color-text-secondary: var(--text-secondary);
+  --color-text-near-white: var(--text-near-white);
+
+  --shadow-elevated: 0 8px 8px rgb(0 0 0 / 0.3);
+  --shadow-dialog: 0 8px 24px rgb(0 0 0 / 0.5);
+  --shadow-input: 0 1px 0 rgb(18 18 18), 0 0 0 1px rgb(124 124 124) inset;
+
   --radius-sm: calc(var(--radius) * 0.6);
   --radius-md: calc(var(--radius) * 0.8);
   --radius-lg: var(--radius);
@@ -55,50 +71,63 @@
 }
 
 /*
- * Catppuccin Macchiato — https://github.com/catppuccin/catppuccin
- * Base #24273a, Mantle #1e2030, Crust #181926, Text #cad3f5, Mauve #c6a0f6,
- * Lavender #b7bdf8, Green #a6da95, Yellow #eed49f, Blue #8aadf4.
+ * Spotify design system — https://www.shadcn.io/design/spotify
+ * Near-black canvas (#121212 / #181818 / #1f1f1f), one functional accent
+ * (#1ed760), pill-and-circle geometry. Dark-only.
  */
 :root,
 .dark {
-  --background: #24273a;
-  --foreground: #cad3f5;
-  --card: #1e2030;
-  --card-foreground: #cad3f5;
-  --popover: #24273a;
-  --popover-foreground: #cad3f5;
-  --primary: #c6a0f6;
-  --primary-foreground: #181926;
-  --secondary: #363a4f;
-  --secondary-foreground: #cad3f5;
-  --muted: #363a4f;
-  --muted-foreground: #a5adcb;
-  --accent: #494d64;
-  --accent-foreground: #cad3f5;
-  --destructive: #ed8796;
-  --success: #a6da95;
-  --success-foreground: #181926;
-  --warning: #eed49f;
-  --warning-foreground: #181926;
-  --info: #8aadf4;
-  --info-foreground: #181926;
-  --border: #494d64;
-  --input: #494d64;
-  --ring: #b7bdf8;
-  --chart-1: #8aadf4;
-  --chart-2: #8bd5ca;
-  --chart-3: #f5a97f;
-  --chart-4: #c6a0f6;
-  --chart-5: #a6da95;
-  --radius: 0.75rem;
-  --sidebar: #1e2030;
-  --sidebar-foreground: #cad3f5;
-  --sidebar-primary: #c6a0f6;
-  --sidebar-primary-foreground: #181926;
-  --sidebar-accent: #363a4f;
-  --sidebar-accent-foreground: #cad3f5;
-  --sidebar-border: #494d64;
-  --sidebar-ring: #b7bdf8;
+  --background: #121212;
+  --foreground: #ffffff;
+  --card: #181818;
+  --card-foreground: #ffffff;
+  --popover: #252525;
+  --popover-foreground: #ffffff;
+  --primary: #1ed760;
+  --primary-foreground: #000000;
+  --secondary: #1f1f1f;
+  --secondary-foreground: #ffffff;
+  --muted: #1f1f1f;
+  --muted-foreground: #b3b3b3;
+  --accent: #252525;
+  --accent-foreground: #ffffff;
+  --destructive: #f3727f;
+  --success: #1ed760;
+  --success-foreground: #000000;
+  --warning: #ffa42b;
+  --warning-foreground: #000000;
+  --info: #539df5;
+  --info-foreground: #000000;
+  --border: #4d4d4d;
+  --input: #4d4d4d;
+  --ring: #1ed760;
+  --chart-1: #1ed760;
+  --chart-2: #539df5;
+  --chart-3: #ffa42b;
+  --chart-4: #f3727f;
+  --chart-5: #b3b3b3;
+  --radius: 0.5rem;
+
+  /* Spotify extras */
+  --surface-mid: #1f1f1f;
+  --surface-card: #252525;
+  --surface-card-alt: #272727;
+  --surface-light: #eeeeee;
+  --brand-green: #1ed760;
+  --brand-green-border: #1db954;
+  --border-light: #7c7c7c;
+  --text-secondary: #b3b3b3;
+  --text-near-white: #cbcbcb;
+  --on-green: #000000;
+
+  --sidebar: #121212;
+  --sidebar-foreground: #b3b3b3;
+  --sidebar-primary: #1ed760;
+  --sidebar-primary-foreground: #000000;
+  --sidebar-accent: #1f1f1f;
+  --sidebar-accent-foreground: #ffffff;
+  --sidebar-border: #4d4d4d;
+  --sidebar-ring: #1ed760;
 }
 
 @layer base {
@@ -111,4 +140,33 @@
   html {
     @apply font-sans;
   }
+  ::-webkit-scrollbar {
+    width: 12px;
+    height: 12px;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    background-color: var(--border);
+    background-clip: content-box;
+    border: 3px solid transparent;
+    border-radius: 9999px;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background-color: var(--border-light);
+  }
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: var(--border) transparent;
+  }
+}
+
+/* Spotify's uppercase "label voice" for buttons and CTAs. */
+@utility text-label {
+  font-size: 0.8125rem;
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: 1.2px;
+  text-transform: uppercase;
 }

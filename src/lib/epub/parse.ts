@@ -210,36 +210,177 @@ async function readCover(
   };
 }
 
+type TocEntry = { title: string; path: string };
+
+/** Collect every value stored under `key`, at any depth. */
+function collectByKey(node: unknown, key: string, out: unknown[]): void {
+  if (!node || typeof node !== "object") return;
+  if (Array.isArray(node)) {
+    for (const item of node) collectByKey(item, key, out);
+    return;
+  }
+  for (const [name, value] of Object.entries(node as XmlNode)) {
+    if (name === key) out.push(...toArray(value));
+    else collectByKey(value, key, out);
+  }
+}
+
+/** EPUB 3 navigation document: anchors under the nav with epub:type="toc". */
+function parseNavAnchors(xml: string, dir: string): TocEntry[] {
+  const parsed = xmlParser.parse(xml) as XmlNode;
+  const navNodes: XmlNode[] = [];
+  collectByKey(parsed, "nav", navNodes);
+
+  const tocNav =
+    navNodes.find((node) => (attr(node, "epub:type") ?? attr(node, "type")) === "toc") ??
+    navNodes[0];
+  if (!tocNav) return [];
+
+  const anchors: XmlNode[] = [];
+  collectByKey(tocNav, "a", anchors);
+
+  const entries: TocEntry[] = [];
+  for (const anchor of anchors) {
+    const href = attr(anchor, "href");
+    if (!href) continue;
+    entries.push({ title: textOf(anchor).trim() || "Untitled", path: resolvePath(dir, href) });
+  }
+  return entries;
+}
+
+/** EPUB 2 NCX: navPoints in document order, label + content src. */
+function parseNcx(xml: string, dir: string): TocEntry[] {
+  const parsed = xmlParser.parse(xml) as XmlNode;
+  const navPoints: XmlNode[] = [];
+  collectByKey(parsed, "navPoint", navPoints);
+
+  const entries: TocEntry[] = [];
+  for (const point of navPoints) {
+    const label = toArray<XmlNode>(point.navLabel)[0];
+    const title = label ? textOf(label.text).trim() : "";
+    const content = toArray<XmlNode>(point.content)[0];
+    const src = content ? attr(content, "src") : undefined;
+    if (src) entries.push({ title: title || "Untitled", path: resolvePath(dir, src) });
+  }
+  return entries;
+}
+
+/** Read the table of contents from the nav document, else the NCX. */
+async function readToc(
+  zip: JSZip,
+  items: XmlNode[],
+  baseDir: string,
+): Promise<{ entries: TocEntry[]; tocPath: string | null }> {
+  const navItem = items.find((item) =>
+    (attr(item, "properties") ?? "").split(/\s+/).includes("nav"),
+  );
+  const ncxItem =
+    items.find((item) => (attr(item, "media-type") ?? "") === "application/x-dtbncx+xml") ??
+    items.find((item) => (attr(item, "href") ?? "").toLowerCase().endsWith(".ncx"));
+
+  for (const [item, parse] of [
+    [navItem, parseNavAnchors],
+    [ncxItem, parseNcx],
+  ] as const) {
+    if (!item) continue;
+    const href = attr(item, "href");
+    if (!href) continue;
+
+    const path = resolvePath(baseDir, href);
+    const xml = await readText(zip, path);
+    if (!xml) continue;
+
+    const entries = parse(xml, posix.dirname(path));
+    if (entries.length > 0) return { entries, tocPath: path };
+  }
+
+  return { entries: [], tocPath: null };
+}
+
+async function readParagraphs(zip: JSZip, paths: string[]): Promise<ParsedParagraph[]> {
+  const paragraphs: ParsedParagraph[] = [];
+  for (const path of paths) {
+    const html = await readText(zip, path);
+    if (html) paragraphs.push(...extractParagraphs(html));
+  }
+  return paragraphs;
+}
+
+function titleFromParagraphs(paragraphs: ParsedParagraph[]): string | null {
+  return paragraphs.find((paragraph) => paragraph.heading)?.text ?? null;
+}
+
+/**
+ * Chapter map. The EPUB's own table of contents is authoritative: each TOC
+ * anchor starts a chapter that runs until the next anchor, so a chapter made of
+ * several spine files is grouped back together and titled from the nav. When no
+ * usable TOC exists, fall back to one chapter per spine document.
+ */
 async function readChapters(
   zip: JSZip,
   pkg: XmlNode,
   byId: Map<string, XmlNode>,
   baseDir: string,
 ): Promise<ParsedChapter[]> {
+  const items = [...byId.values()];
   const spine = toArray<XmlNode>(asNode(pkg.spine).itemref)
     .map((ref) => byId.get(attr(ref, "idref") ?? ""))
-    .filter((item): item is XmlNode => Boolean(item));
+    .filter((item): item is XmlNode => Boolean(item))
+    .filter((item) => (attr(item, "media-type") ?? "").includes("html"));
 
+  const { entries, tocPath } = await readToc(zip, items, baseDir);
+  const docs = spine
+    .map((item) => attr(item, "href"))
+    .filter((href): href is string => Boolean(href))
+    .map((href) => resolvePath(baseDir, href))
+    .filter((path) => path !== tocPath);
+
+  if (entries.length > 0 && docs.length > 0) {
+    const position = new Map<string, number>();
+    docs.forEach((path, index) => {
+      if (!position.has(path)) position.set(path, index);
+    });
+
+    const anchors = entries
+      .map((entry) => ({ title: entry.title, pos: position.get(entry.path) }))
+      .filter((anchor): anchor is { title: string; pos: number } => anchor.pos !== undefined)
+      .sort((a, b) => a.pos - b.pos)
+      .filter((anchor, index, all) => index === 0 || anchor.pos !== all[index - 1].pos);
+
+    if (anchors.length > 0) {
+      const chapters: ParsedChapter[] = [];
+
+      if (anchors[0].pos > 0) {
+        const paragraphs = await readParagraphs(zip, docs.slice(0, anchors[0].pos));
+        if (paragraphs.length > 0) {
+          chapters.push({ title: titleFromParagraphs(paragraphs) ?? "Front Matter", paragraphs });
+        }
+      }
+
+      for (let i = 0; i < anchors.length; i++) {
+        const start = anchors[i].pos;
+        const end = i + 1 < anchors.length ? anchors[i + 1].pos : docs.length;
+        const paragraphs = await readParagraphs(zip, docs.slice(start, end));
+        if (paragraphs.length === 0) continue;
+        chapters.push({
+          title: anchors[i].title || titleFromParagraphs(paragraphs) || `Chapter ${chapters.length + 1}`,
+          paragraphs,
+        });
+      }
+
+      if (chapters.length > 0) return chapters;
+    }
+  }
+
+  // Fallback: one chapter per spine document.
   const chapters: ParsedChapter[] = [];
-  for (const item of spine) {
-    const mediaType = attr(item, "media-type") ?? "";
-    if (!mediaType.includes("html")) continue;
-
-    const href = attr(item, "href");
-    if (!href) continue;
-
-    const html = await readText(zip, resolvePath(baseDir, href));
-    if (!html) continue;
-
-    const paragraphs = extractParagraphs(html);
+  for (const path of docs) {
+    const paragraphs = await readParagraphs(zip, [path]);
     if (paragraphs.length === 0) continue;
-
-    const heading = paragraphs.find((paragraph) => paragraph.heading)?.text;
     chapters.push({
-      title: heading ?? `Chapter ${chapters.length + 1}`,
+      title: titleFromParagraphs(paragraphs) ?? `Chapter ${chapters.length + 1}`,
       paragraphs,
     });
   }
-
   return chapters;
 }
