@@ -2,7 +2,8 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { BookPlus, Headphones, PanelLeft, Search } from "lucide-react";
+import { usePathname, useRouter } from "next/navigation";
+import { ArrowLeft, BookPlus, Headphones, PanelLeft, Search } from "lucide-react";
 
 import { ImportDialog } from "@/components/library/import-dialog";
 import { Button } from "@/components/ui/button";
@@ -18,10 +19,12 @@ export function TopBar({
   onToggleSidebar: () => void;
 }) {
   const { query, setQuery } = useSearch();
+  const router = useRouter();
+  const pathname = usePathname();
   const [importOpen, setImportOpen] = useState(false);
 
   return (
-    <header className="flex h-16 shrink-0 items-center gap-3 px-4 md:px-6">
+    <header className="flex h-16 shrink-0 items-center gap-2 px-4 md:gap-3 md:px-6">
       <Button
         variant="ghost"
         size="icon-sm"
@@ -31,6 +34,12 @@ export function TopBar({
       >
         <PanelLeft className="size-4" />
       </Button>
+
+      {pathname !== "/" ? (
+        <Button variant="ghost" size="icon-sm" onClick={() => router.back()} aria-label="Go back">
+          <ArrowLeft className="size-4" />
+        </Button>
+      ) : null}
 
       <Link href="/" className="flex shrink-0 items-center md:hidden" aria-label="Audiobook home">
         <Headphones className="size-6 text-brand" />
