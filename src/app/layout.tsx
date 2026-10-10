@@ -13,8 +13,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Audiobook",
-  description: "Turn EPUBs into context-aware audiobooks.",
+  title: "ChattyPub",
+  description: "ChattyPub turns EPUBs into context-aware audiobooks.",
 };
 
 export const viewport: Viewport = {

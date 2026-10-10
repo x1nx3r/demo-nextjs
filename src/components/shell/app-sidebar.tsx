@@ -49,23 +49,23 @@ export function AppSidebar({ books, collapsed }: { books: ShellBook[]; collapsed
       )}
     >
       <Link
-        href="/"
+        href="/library"
         className={cn("flex items-center gap-2 py-5", collapsed ? "justify-center px-2" : "px-5")}
       >
         <Headphones className="size-6 shrink-0 text-brand" />
         {collapsed ? null : (
-          <span className="font-heading text-lg font-bold tracking-tight">Audiobook</span>
+          <span className="font-heading text-lg font-bold tracking-tight">ChattyPub</span>
         )}
       </Link>
 
       <nav className={cn(collapsed ? "px-2" : "px-3")}>
         <Link
-          href="/"
+          href="/library"
           title="Library"
           className={cn(
             "flex items-center gap-3 rounded-md py-2 text-sm transition-colors",
             collapsed ? "justify-center" : "px-3",
-            pathname === "/"
+            pathname === "/library"
               ? "font-bold text-foreground"
               : "text-text-secondary hover:text-foreground",
           )}

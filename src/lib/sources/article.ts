@@ -13,7 +13,7 @@ import { parseHTML } from "linkedom";
 
 import type { ParsedBook, ParsedParagraph } from "@/lib/epub/parse";
 
-const USER_AGENT = "audiobook-ingest/0.1";
+const USER_AGENT = "chattypub-ingest/0.1";
 const MAX_HTML = 3_000_000;
 const MAX_COVER_BYTES = 4_000_000;
 

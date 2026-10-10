@@ -10,7 +10,7 @@
  * No per-call fee; the caller caches results per book.
  */
 
-const USER_AGENT = "audiobook-ingest/0.1";
+const USER_AGENT = "chattypub-ingest/0.1";
 const JSON_HEADERS = { "User-Agent": USER_AGENT, Accept: "application/json" };
 const MAX_TEXT_CHARS = 4000;
 

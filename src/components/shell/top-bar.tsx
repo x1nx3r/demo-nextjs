@@ -35,13 +35,13 @@ export function TopBar({
         <PanelLeft className="size-4" />
       </Button>
 
-      {pathname !== "/" ? (
+      {pathname !== "/library" ? (
         <Button variant="ghost" size="icon-sm" onClick={() => router.back()} aria-label="Go back">
           <ArrowLeft className="size-4" />
         </Button>
       ) : null}
 
-      <Link href="/" className="flex shrink-0 items-center md:hidden" aria-label="Audiobook home">
+      <Link href="/library" className="flex shrink-0 items-center md:hidden" aria-label="ChattyPub home">
         <Headphones className="size-6 text-brand" />
       </Link>
 

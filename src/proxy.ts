@@ -14,6 +14,6 @@ export function proxy(request: NextRequest) {
 }
 
 export const config = {
-  // Guard pages only; API routes perform their own session checks.
-  matcher: ["/((?!api|_next/static|_next/image|favicon.ico|login|.*\\..*).*)"],
+  // Guard the app pages only; the landing page, login and API routes are open.
+  matcher: ["/library/:path*", "/book/:path*"],
 };

@@ -153,7 +153,7 @@ function buildHeaders(
   if (provider === "openrouter") {
     // Optional attribution headers; harmless when unset.
     const referer = process.env.OPENROUTER_REFERER ?? process.env.APP_URL;
-    const title = process.env.OPENROUTER_TITLE ?? "audiobook";
+    const title = process.env.OPENROUTER_TITLE ?? "chattypub";
     if (referer) headers["HTTP-Referer"] = referer;
     if (title) headers["X-Title"] = title;
   }

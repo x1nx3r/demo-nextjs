@@ -17,10 +17,10 @@ export function MobileNav() {
   return (
     <nav className="flex h-14 shrink-0 items-center border-t border-border bg-background md:hidden">
       <Link
-        href="/"
+        href="/library"
         className={cn(
           base,
-          pathname === "/" || pathname.startsWith("/book") ? "text-foreground" : "text-text-secondary",
+          pathname === "/library" || pathname.startsWith("/book") ? "text-foreground" : "text-text-secondary",
         )}
       >
         <Library className="size-5" />

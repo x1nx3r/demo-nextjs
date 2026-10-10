@@ -170,3 +170,14 @@
   letter-spacing: 1.2px;
   text-transform: uppercase;
 }
+
+/* Equalizer bars on the landing page. */
+@keyframes eq-bar {
+  0%,
+  100% {
+    transform: scaleY(0.28);
+  }
+  50% {
+    transform: scaleY(1);
+  }
+}
