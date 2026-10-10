@@ -105,23 +105,27 @@ export async function ingestChapter(
   await logEvent(job, "info", `Planned ${units.length} units`);
 
   let castBuilt = false;
-  try {
-    const built = await runChapterDirector(bookId, idx, cast, async (message) => {
-      await logEvent(job, "info", `Director: ${message}`);
-    });
-    const names = built.characters.map((member) => member.name).join(", ");
-    await logEvent(job, "info", `Cast: ${names || "narrator only"}`);
-    castBuilt = true;
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    await logEvent(job, "warn", `Director failed: ${message}`);
+  if (book.kind === "article") {
+    await logEvent(job, "info", "Article: narrator only, no cast");
+  } else {
     try {
-      const built = await buildBookCast(bookId);
+      const built = await runChapterDirector(bookId, idx, cast, async (message) => {
+        await logEvent(job, "info", `Director: ${message}`);
+      });
       const names = built.characters.map((member) => member.name).join(", ");
-      await logEvent(job, "info", `Cast (hints): ${names || "narrator only"}`);
+      await logEvent(job, "info", `Cast: ${names || "narrator only"}`);
       castBuilt = true;
-    } catch {
-      // Cast building is best-effort; convert can still fall back to the narrator.
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      await logEvent(job, "warn", `Director failed: ${message}`);
+      try {
+        const built = await buildBookCast(bookId);
+        const names = built.characters.map((member) => member.name).join(", ");
+        await logEvent(job, "info", `Cast (hints): ${names || "narrator only"}`);
+        castBuilt = true;
+      } catch {
+        // Cast building is best-effort; convert can still fall back to the narrator.
+      }
     }
   }
 

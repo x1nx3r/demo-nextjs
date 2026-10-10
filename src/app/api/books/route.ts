@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 
 import { getSession } from "@/lib/auth";
 import { resolveReferenceContext } from "@/lib/reference";
-import { createBookFromEpub, listBooks } from "@/lib/store/books";
+import { createBookFromArticle, createBookFromSource, listBooks } from "@/lib/store/books";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -39,31 +39,36 @@ export async function POST(request: Request) {
     );
   }
 
-  const file = form.get("file");
-  if (!(file instanceof File)) {
-    return NextResponse.json({ error: "Missing EPUB file" }, { status: 400 });
-  }
-  if (file.size === 0) {
-    return NextResponse.json({ error: "The file is empty" }, { status: 400 });
-  }
+  const context = await resolveContextField(form.get("context"));
+  const directionField = form.get("direction");
+  const direction =
+    typeof directionField === "string" && directionField.trim()
+      ? directionField.trim()
+      : undefined;
+
+  const urlField = form.get("url");
+  const url = typeof urlField === "string" ? urlField.trim() : "";
 
   try {
+    if (url) {
+      const book = await createBookFromArticle(url, context, direction);
+      return NextResponse.json({ book }, { status: 201 });
+    }
+
+    const file = form.get("file");
+    if (!(file instanceof File)) {
+      return NextResponse.json({ error: "Add an EPUB, TXT, MD file, or a link" }, { status: 400 });
+    }
+    if (file.size === 0) {
+      return NextResponse.json({ error: "The file is empty" }, { status: 400 });
+    }
+
     const data = new Uint8Array(await file.arrayBuffer());
-    const contextField = form.get("context");
-    const context = await resolveContextField(contextField);
-    const directionField = form.get("direction");
-    const direction =
-      typeof directionField === "string" && directionField.trim()
-        ? directionField.trim()
-        : undefined;
-    const book = await createBookFromEpub(data, context, direction);
+    const book = await createBookFromSource(data, file.name, context, direction);
     return NextResponse.json({ book }, { status: 201 });
   } catch (error) {
     return NextResponse.json(
-      {
-        error:
-          error instanceof Error ? error.message : "Failed to import EPUB",
-      },
+      { error: error instanceof Error ? error.message : "Failed to import" },
       { status: 422 },
     );
   }

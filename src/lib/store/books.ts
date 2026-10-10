@@ -1,6 +1,8 @@
 import { randomUUID } from "node:crypto";
 
-import { parseEpub, type ParsedParagraph } from "@/lib/epub/parse";
+import { fetchArticle, fetchArticleImage, parseArticle } from "@/lib/sources/article";
+import { parseSource, sourceContentType, sourceExtension } from "@/lib/sources/parse";
+import type { ParsedBook, ParsedParagraph } from "@/lib/epub/parse";
 import {
   bookContextKey,
   bookCoverKey,
@@ -44,6 +46,8 @@ export type BookMeta = {
   charCount: number;
   chapters: ChapterMeta[];
   createdAt: string;
+  /** "book" for a multi-chapter source, "article" for a single narrated piece. */
+  kind?: "book" | "article";
 };
 
 export type ChapterText = {
@@ -108,28 +112,58 @@ export async function getChapterText(
   return getJson<ChapterText>(chapterTextKey(bookId, idx));
 }
 
-export async function createBookFromEpub(
+export async function createBookFromSource(
   data: Uint8Array,
+  filename: string,
   context?: string,
   direction?: string,
 ): Promise<BookMeta> {
-  const parsed = await parseEpub(data);
+  const parsed = await parseSource(data, filename);
   const id = randomUUID();
-  const createdAt = new Date().toISOString();
 
-  await putBytes(bookSourceKey(id), data, "application/epub+zip");
+  await putBytes(bookSourceKey(id, sourceExtension(filename)), data, sourceContentType(filename));
   if (parsed.cover) {
     await putBytes(bookCoverKey(id), parsed.cover.data, parsed.cover.contentType);
   }
-  const reference = context?.trim();
-  if (reference) {
-    await putText(bookContextKey(id), reference);
-  }
-  const storyDirection = direction?.trim();
-  if (storyDirection) {
-    await putText(bookDirectionKey(id), storyDirection);
-  }
+  await writeBookTexts(id, context, direction);
 
+  return storeParsed(id, parsed, "book", parsed.cover);
+}
+
+/** Fetch a URL, extract the article, and store it as a one-chapter "article". */
+export async function createBookFromArticle(
+  url: string,
+  context?: string,
+  direction?: string,
+): Promise<BookMeta> {
+  const { html, finalUrl } = await fetchArticle(url);
+  const parsed = parseArticle(html, finalUrl);
+  const id = randomUUID();
+
+  await putText(bookSourceKey(id, "url"), finalUrl, "text/plain");
+  const cover = await fetchArticleImage(html);
+  if (cover) {
+    await putBytes(bookCoverKey(id), cover.data, cover.contentType);
+  }
+  await writeBookTexts(id, context, direction);
+
+  return storeParsed(id, parsed, "article", cover);
+}
+
+async function writeBookTexts(id: string, context?: string, direction?: string): Promise<void> {
+  const reference = context?.trim();
+  if (reference) await putText(bookContextKey(id), reference);
+  const storyDirection = direction?.trim();
+  if (storyDirection) await putText(bookDirectionKey(id), storyDirection);
+}
+
+/** Store the chapter texts and the book meta for a parsed source. */
+async function storeParsed(
+  id: string,
+  parsed: ParsedBook,
+  kind: "book" | "article",
+  cover: ParsedBook["cover"],
+): Promise<BookMeta> {
   const chapters: ChapterMeta[] = [];
   let totalChars = 0;
 
@@ -152,11 +186,12 @@ export async function createBookFromEpub(
     title: parsed.title,
     author: parsed.author,
     language: parsed.language,
-    coverContentType: parsed.cover?.contentType ?? null,
+    coverContentType: cover?.contentType ?? null,
     chapterCount: chapters.length,
     charCount: totalChars,
     chapters,
-    createdAt,
+    createdAt: new Date().toISOString(),
+    kind,
   };
 
   await putJson(bookMetaKey(id), book);

@@ -2,7 +2,8 @@ export const LIBRARY_PREFIX = "books/";
 
 export const bookPrefix = (bookId: string) => `books/${bookId}/`;
 export const bookMetaKey = (bookId: string) => `books/${bookId}/meta.json`;
-export const bookSourceKey = (bookId: string) => `books/${bookId}/source.epub`;
+export const bookSourceKey = (bookId: string, ext = "epub") =>
+  `books/${bookId}/source.${ext}`;
 export const bookCoverKey = (bookId: string) => `books/${bookId}/cover.jpg`;
 export const bookProgressKey = (bookId: string) => `books/${bookId}/progress.json`;
 

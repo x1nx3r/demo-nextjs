@@ -7,11 +7,13 @@ import { Loader2, UploadCloud, X } from "lucide-react";
 import { cn } from "cn";
 
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 
 export function ImportDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
   const router = useRouter();
   const inputRef = useRef<HTMLInputElement | null>(null);
   const [file, setFile] = useState<File | null>(null);
+  const [url, setUrl] = useState("");
   const [context, setContext] = useState("");
   const [direction, setDirection] = useState("");
   const [dragging, setDragging] = useState(false);
@@ -30,6 +32,7 @@ export function ImportDialog({ open, onClose }: { open: boolean; onClose: () => 
   useEffect(() => {
     if (!open) return;
     setFile(null);
+    setUrl("");
     setContext("");
     setDirection("");
     setDragging(false);
@@ -45,19 +48,10 @@ export function ImportDialog({ open, onClose }: { open: boolean; onClose: () => 
     }
   }
 
-  async function submit() {
-    if (!file) {
-      setError("Choose an EPUB file.");
-      return;
-    }
+  async function post(body: FormData) {
     setPending(true);
     setError(null);
     try {
-      const body = new FormData();
-      body.append("file", file);
-      if (context.trim()) body.append("context", context.trim());
-      if (direction.trim()) body.append("direction", direction.trim());
-
       const response = await fetch("/api/books", { method: "POST", body });
       const payload = (await response.json().catch(() => null)) as
         | { book?: { id: string }; error?: string }
@@ -77,6 +71,33 @@ export function ImportDialog({ open, onClose }: { open: boolean; onClose: () => 
     }
   }
 
+  function withExtras(body: FormData): FormData {
+    if (context.trim()) body.append("context", context.trim());
+    if (direction.trim()) body.append("direction", direction.trim());
+    return body;
+  }
+
+  function submitFile() {
+    if (!file) {
+      setError("Choose a file.");
+      return;
+    }
+    const body = new FormData();
+    body.append("file", file);
+    void post(withExtras(body));
+  }
+
+  function narrateUrl() {
+    const value = url.trim();
+    if (!value) {
+      setError("Paste a link.");
+      return;
+    }
+    const body = new FormData();
+    body.append("url", value);
+    void post(withExtras(body));
+  }
+
   if (!open) return null;
 
   return createPortal(
@@ -89,7 +110,7 @@ export function ImportDialog({ open, onClose }: { open: boolean; onClose: () => 
       />
       <div className="relative z-10 flex w-full max-w-md flex-col gap-4 rounded-lg bg-card p-5 shadow-dialog">
         <div className="flex items-center justify-between">
-          <h2 className="font-heading text-lg font-bold tracking-tight">Import EPUB</h2>
+          <h2 className="font-heading text-lg font-bold tracking-tight">Import</h2>
           <Button variant="ghost" size="icon-sm" onClick={onClose} aria-label="Close">
             <X className="size-4" />
           </Button>
@@ -109,21 +130,41 @@ export function ImportDialog({ open, onClose }: { open: boolean; onClose: () => 
             pick(event.dataTransfer.files);
           }}
           className={cn(
-            "flex w-full flex-col items-center gap-2 rounded-lg border border-dashed px-4 py-8 text-center transition-colors",
+            "flex w-full flex-col items-center gap-2 rounded-lg border border-dashed px-4 py-7 text-center transition-colors",
             dragging ? "border-brand bg-secondary" : "border-border hover:bg-secondary/50",
           )}
         >
           <UploadCloud className={cn("size-6", dragging ? "text-brand" : "text-text-secondary")} />
-          <span className="text-sm">{file ? file.name : "Drop an EPUB here, or click to browse"}</span>
-          <span className="text-xs text-text-secondary">.epub</span>
+          <span className="text-sm">
+            {file ? file.name : "Drop an EPUB, TXT, or Markdown file here, or click to browse"}
+          </span>
+          <span className="text-xs text-text-secondary">.epub · .txt · .md</span>
         </button>
         <input
           ref={inputRef}
           type="file"
-          accept=".epub,application/epub+zip"
+          accept=".epub,.txt,.md,.markdown,application/epub+zip,text/plain,text/markdown"
           className="hidden"
           onChange={(event) => pick(event.target.files)}
         />
+
+        <div className="flex items-center gap-2">
+          <Input
+            value={url}
+            onChange={(event) => setUrl(event.target.value)}
+            placeholder="or paste an article link"
+            aria-label="Article URL"
+            className="h-9"
+          />
+          <Button
+            variant="secondary"
+            className="shrink-0"
+            onClick={narrateUrl}
+            disabled={pending || !url.trim()}
+          >
+            Narrate
+          </Button>
+        </div>
 
         <label className="flex flex-col gap-1.5">
           <span className="text-xs font-bold tracking-wide text-text-secondary uppercase">
@@ -157,9 +198,9 @@ export function ImportDialog({ open, onClose }: { open: boolean; onClose: () => 
           <Button variant="ghost" onClick={onClose} disabled={pending}>
             Cancel
           </Button>
-          <Button onClick={submit} disabled={pending || !file} className="gap-2">
+          <Button onClick={submitFile} disabled={pending || !file} className="gap-2">
             {pending ? <Loader2 className="size-4 animate-spin" /> : null}
-            {pending ? "Importing…" : "Import"}
+            {pending ? "Importing…" : "Import file"}
           </Button>
         </div>
       </div>
