@@ -91,12 +91,12 @@ export function CastRail({
     <section className="flex flex-col gap-3 rounded-lg bg-card p-4">
       <div className="flex items-center justify-between">
         <h2 className="text-sm font-bold tracking-wide text-text-secondary uppercase">Cast</h2>
-        {cast ? <span className="text-xs text-text-secondary">{characters.length}</span> : null}
+        {cast ? <span className="text-xs text-text-secondary">{characters.length + 1}</span> : null}
       </div>
 
       {loading && !cast ? (
         <p className="text-xs text-text-secondary">Loading…</p>
-      ) : characters.length === 0 ? (
+      ) : !cast ? (
         <p className="text-xs text-text-secondary">
           No cast yet. Plan a chapter and the Director will build one.
         </p>

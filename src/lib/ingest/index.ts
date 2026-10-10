@@ -107,7 +107,12 @@ export async function ingestChapter(
 
   let castBuilt = false;
   if (book.kind === "article") {
-    await logEvent(job, "info", "Article: narrator only, no cast");
+    // Articles use a single narrator. Persist the cast anyway, so the narrator
+    // appears in the workbench and its voice can be previewed and changed.
+    await putCast(bookId, cast);
+    await linkScriptsToCast(bookId, cast);
+    await logEvent(job, "info", `Cast: ${cast.narrator.name} (narrator)`);
+    castBuilt = true;
   } else {
     try {
       const built = await runChapterDirector(bookId, idx, cast, async (message) => {
