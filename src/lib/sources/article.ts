@@ -17,6 +17,30 @@ const USER_AGENT = "chattypub-ingest/0.1";
 const MAX_HTML = 3_000_000;
 const MAX_COVER_BYTES = 4_000_000;
 
+/**
+ * Medium blocks plain fetches behind Cloudflare. A Freedium instance renders
+ * the article, so wrap the URL when the host is Medium. Set FREEDIUM_URL to
+ * your own instance, or leave it empty to fetch Medium directly.
+ */
+const FREEDIUM_BASE = (process.env.FREEDIUM_URL ?? "https://freedium.x1nx3r.dev").replace(/\/+$/, "");
+
+function isMediumHost(url: URL): boolean {
+  const host = url.hostname.toLowerCase();
+  return host === "medium.com" || host.endsWith(".medium.com");
+}
+
+/** Freedium expects the full target URL appended to its base. */
+function freediumTarget(target: string): string {
+  return `${FREEDIUM_BASE}/${target}`;
+}
+
+/** Freedium appends " - Freedium"; drop it from the title. */
+function cleanTitle(value: string | null): string | null {
+  if (!value) return null;
+  const cleaned = value.replace(/\s*[-–—|]\s*Freedium\s*$/i, "").trim();
+  return cleaned || null;
+}
+
 const ENTITIES: Record<string, string> = {
   amp: "&", lt: "<", gt: ">", quot: '"', apos: "'", nbsp: " ",
   mdash: "\u2014", ndash: "\u2013", hellip: "\u2026",
@@ -108,7 +132,19 @@ function paragraphsFrom(html: string): ParsedParagraph[] {
 
 export async function fetchArticle(url: string): Promise<{ html: string; finalUrl: string }> {
   const target = /^https?:\/\//i.test(url) ? url : `https://${url}`;
-  const response = await fetch(target, {
+
+  let parsed: URL;
+  try {
+    parsed = new URL(target);
+  } catch {
+    throw new Error("That link is not a valid URL");
+  }
+
+  // Medium 403s behind Cloudflare; a Freedium instance renders the article.
+  const useFreedium = FREEDIUM_BASE.length > 0 && isMediumHost(parsed);
+  const requestUrl = useFreedium ? freediumTarget(target) : target;
+
+  const response = await fetch(requestUrl, {
     headers: { "User-Agent": USER_AGENT, Accept: "text/html,application/xhtml+xml" },
     redirect: "follow",
   });
@@ -118,7 +154,8 @@ export async function fetchArticle(url: string): Promise<{ html: string; finalUr
     throw new Error("That link is not an HTML page");
   }
   const html = (await response.text()).slice(0, MAX_HTML);
-  return { html, finalUrl: response.url || target };
+  // Keep the original Medium URL as the source, not the Freedium wrapper.
+  return { html, finalUrl: useFreedium ? target : response.url || target };
 }
 
 export function parseArticle(html: string, url: string): ParsedBook {
@@ -158,6 +195,7 @@ export function parseArticle(html: string, url: string): ParsedBook {
     throw new Error("No readable text found on that page");
   }
 
+  title = cleanTitle(title);
   const firstHeading = paragraphs.find((paragraph) => paragraph.heading)?.text ?? null;
   const finalTitle = title ?? firstHeading ?? host;
 
