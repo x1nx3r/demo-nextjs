@@ -10,8 +10,10 @@
  */
 
 import { getCast, defaultCast } from "@/lib/tts/cast";
-import { renderUnit } from "@/lib/tts/engine";
+import { renderUnit, type RenderedUnit } from "@/lib/tts/engine";
+import { getProvider } from "@/lib/tts/providers";
 import { isQuotaError } from "@/lib/tts/types";
+import type { RenderUnit } from "@/lib/ingest/types";
 import { hasRenderableText, normalizeSource } from "@/lib/ingest/text";
 
 import { getBook, patchChapter } from "@/lib/store/books";
@@ -19,6 +21,21 @@ import { getChapterScript, putChapterScript } from "@/lib/store/chunks";
 import { logEvent, loadOrCreateJob, setProgress } from "@/lib/store/jobs";
 
 const CHECKPOINT_EVERY = 5;
+
+/**
+ * Fish units are independent (no stitch id), so a few can render at once. The
+ * default is deliberately low to stay inside the free tier's rate limit; raise
+ * it with FISH_CONCURRENCY when the account allows more.
+ */
+const DEFAULT_FISH_CONCURRENCY = 3;
+const MAX_CONCURRENCY = 8;
+
+function resolveConcurrency(override?: number): number {
+  const env = Number(process.env.FISH_CONCURRENCY ?? process.env.TTS_CONCURRENCY ?? "");
+  const requested = override ?? (Number.isFinite(env) && env > 0 ? env : 0);
+  const value = requested > 0 ? requested : DEFAULT_FISH_CONCURRENCY;
+  return Math.max(1, Math.min(Math.floor(value), MAX_CONCURRENCY));
+}
 
 export class ConvertError extends Error {
   readonly status: number;
@@ -37,6 +54,8 @@ export type ConvertDebugEvent =
 
 export type ConvertOptions = {
   providerId?: string;
+  /** Max units to render at once. Only used for providers without stitching. */
+  concurrency?: number;
   debug?: (event: ConvertDebugEvent) => void;
 };
 
@@ -104,6 +123,11 @@ export async function convertChapter(
   let done = units.filter((unit) => unit.audio).length;
   let characters = 0;
 
+  // Fish has no cross-request stitch id, so its units are independent and can
+  // render in parallel. Every other provider stitches, so it stays sequential.
+  const parallel = getProvider(options.providerId).id === "fish";
+  const concurrency = parallel ? resolveConcurrency(options.concurrency) : 1;
+
   const job = await loadOrCreateJob(bookId, idx, "rendering");
   job.total = total;
   job.done = done;
@@ -111,68 +135,140 @@ export async function convertChapter(
   await logEvent(
     job,
     "info",
-    done > 0 ? `Resuming · ${done}/${total} already rendered` : `Rendering ${total} units`,
+    done > 0
+      ? `Resuming · ${done}/${total} already rendered`
+      : `Rendering ${total} units${concurrency > 1 ? ` · ${concurrency} at a time` : ""}`,
   );
   await patchChapter(bookId, idx, { status: "converting", unitCount: total, unitsDone: done });
 
-  // Reconstruct the stitch context from the last rendered unit before the gap.
-  let previousRequestIds: string[] = [];
-  const firstPending = units.findIndex((unit) => !unit.audio);
-  if (firstPending > 0) {
-    const previous = units[firstPending - 1].requestId;
-    if (previous) previousRequestIds = [previous];
+  function unitLength(unit: RenderUnit): number {
+    return unit.type === "speech"
+      ? unit.text.length
+      : unit.lines.reduce((sum, line) => sum + line.text.length, 0);
   }
 
-  for (let i = 0; i < total; i++) {
-    const unit = units[i];
-    if (unit.audio) {
-      options.debug?.({ kind: "skip", id: unit.id, type: unit.type });
-      continue;
+  async function record(unit: RenderUnit, result: RenderedUnit): Promise<void> {
+    const chars = unitLength(unit);
+    unit.audio = result.hash;
+    unit.requestId = result.requestId;
+    characters += chars;
+    done++;
+
+    const voices = unit.type === "dialogue" ? new Set(unit.lines.map((line) => line.speakerHint)).size : 1;
+    const label = unit.type === "dialogue" ? `Dialogue · ${voices} voices` : "Speech";
+    await logEvent(
+      job,
+      "info",
+      `${label} ${done}/${total} · ${chars} chars${result.cached ? " · cached" : ""}${result.requestId ? ` · stitch ${result.requestId.slice(0, 8)}` : ""}`,
+    );
+    await setProgress(job, { done, total, chars: characters });
+    options.debug?.({
+      kind: "unit",
+      id: unit.id,
+      type: unit.type,
+      chars,
+      cached: result.cached,
+      requestId: result.requestId,
+      cost: result.characterCost,
+    });
+  }
+
+  const markPartial = async (error: unknown, unit?: RenderUnit): Promise<ConvertResult> => {
+    const message = error instanceof Error ? error.message : "Render failed";
+    if (unit) options.debug?.({ kind: "error", id: unit.id, type: unit.type, message });
+    await logEvent(job, "error", `Stopped: ${message}`);
+    await setProgress(job, { phase: "idle", running: false, done, total, chars: characters });
+    await putChapterScript(bookId, idx, script);
+    await patchChapter(bookId, idx, { status: "partial", unitsDone: done });
+    return { bookId, idx, status: "partial", done, total, characters, error: message };
+  };
+
+  if (concurrency <= 1) {
+    // Sequential path (stitching providers). Reconstruct the stitch context
+    // from the last rendered unit before the gap.
+    let previousRequestIds: string[] = [];
+    const firstPending = units.findIndex((unit) => !unit.audio);
+    if (firstPending > 0) {
+      const previous = units[firstPending - 1].requestId;
+      if (previous) previousRequestIds = [previous];
     }
 
-    const chars = unit.type === "speech" ? unit.text.length : unit.lines.reduce((sum, line) => sum + line.text.length, 0);
+    for (let i = 0; i < total; i++) {
+      const unit = units[i];
+      if (unit.audio) {
+        options.debug?.({ kind: "skip", id: unit.id, type: unit.type });
+        continue;
+      }
 
-    try {
-      const result = await renderUnit(unit, cast, {
-        providerId: options.providerId,
-        previousRequestIds,
-      });
-      unit.audio = result.hash;
-      unit.requestId = result.requestId;
-      characters += chars;
-      done++;
+      try {
+        const result = await renderUnit(unit, cast, {
+          providerId: options.providerId,
+          previousRequestIds,
+        });
+        await record(unit, result);
+        if (result.requestId) previousRequestIds = [result.requestId];
+      } catch (error) {
+        return await markPartial(error, unit);
+      }
 
-      const voices = unit.type === "dialogue" ? new Set(unit.lines.map((line) => line.speakerHint)).size : 1;
-      const label = unit.type === "dialogue" ? `Dialogue · ${voices} voices` : "Speech";
-      await logEvent(
-        job,
-        "info",
-        `${label} ${done}/${total} · ${chars} chars${result.cached ? " · cached" : ""}${result.requestId ? ` · stitch ${result.requestId.slice(0, 8)}` : ""}`,
+      if (done % CHECKPOINT_EVERY === 0) {
+        await putChapterScript(bookId, idx, script);
+      }
+    }
+  } else {
+    // Bounded pool (Fish). Renders run at once; store writes are serialized so
+    // the job log, progress and checkpoints cannot race.
+    let cursor = 0;
+    let stopped = false;
+    const state: { failure: { error: unknown; unit: RenderUnit } | null } = { failure: null };
+
+    let tail: Promise<unknown> = Promise.resolve();
+    const serialize = (fn: () => Promise<void>): Promise<void> => {
+      const run = tail.then(fn, fn);
+      tail = run.then(
+        () => undefined,
+        () => undefined,
       );
-      await setProgress(job, { done, total, chars: characters });
+      return run;
+    };
 
-      if (result.requestId) previousRequestIds = [result.requestId];
-      options.debug?.({
-        kind: "unit",
-        id: unit.id,
-        type: unit.type,
-        chars,
-        cached: result.cached,
-        requestId: result.requestId,
-        cost: result.characterCost,
-      });
-    } catch (error) {
-      const message = error instanceof Error ? error.message : "Render failed";
-      options.debug?.({ kind: "error", id: unit.id, type: unit.type, message });
-      await logEvent(job, "error", `Stopped: ${message}`);
-      await setProgress(job, { phase: "idle", running: false, done, total, chars: characters });
-      await putChapterScript(bookId, idx, script);
-      await patchChapter(bookId, idx, { status: "partial", unitsDone: done });
-      return { bookId, idx, status: "partial", done, total, characters, error: message };
-    }
+    const worker = async (): Promise<void> => {
+      while (!stopped) {
+        const i = cursor++;
+        if (i >= total) return;
 
-    if (done % CHECKPOINT_EVERY === 0) {
-      await putChapterScript(bookId, idx, script);
+        const unit = units[i];
+        if (unit.audio) {
+          options.debug?.({ kind: "skip", id: unit.id, type: unit.type });
+          continue;
+        }
+
+        let result: RenderedUnit;
+        try {
+          result = await renderUnit(unit, cast, { providerId: options.providerId });
+        } catch (error) {
+          if (!stopped) {
+            stopped = true;
+            state.failure = { error, unit };
+          }
+          return;
+        }
+
+        await serialize(async () => {
+          if (unit.audio) return;
+          await record(unit, result);
+          if (done % CHECKPOINT_EVERY === 0) {
+            await putChapterScript(bookId, idx, script);
+          }
+        });
+      }
+    };
+
+    await Promise.all(Array.from({ length: Math.min(concurrency, total) }, () => worker()));
+    await tail;
+
+    if (state.failure) {
+      return await markPartial(state.failure.error, state.failure.unit);
     }
   }
 
