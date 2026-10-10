@@ -8,6 +8,9 @@ import type { Cast, TagCatalogue } from "@/lib/tts/types";
 /** A speaker as the planner sees them: a name and how they speak. */
 export type CastBrief = { name: string; register?: string };
 
+/** Which planner prompt to use: a novel (cast + dialogue) or a nonfiction article. */
+export type PlanMode = "book" | "article";
+
 function catalogueText(catalogue: TagCatalogue): string {
   return [
     `Mood: ${catalogue.mood.join(" ")}`,
@@ -18,7 +21,59 @@ function catalogueText(catalogue: TagCatalogue): string {
     .join("\n");
 }
 
-export function planSystemPrompt(catalogue: TagCatalogue): string {
+export function planSystemPrompt(catalogue: TagCatalogue, mode: PlanMode = "book"): string {
+  return mode === "article"
+    ? planArticleSystemPrompt(catalogue)
+    : planBookSystemPrompt(catalogue);
+}
+
+/**
+ * Article path. The source is prose, not a novel, so the planner adapts it into
+ * an expressive single-narrator performance. This path does not check word
+ * coverage: the model may rephrase, tighten and reorder for the spoken version.
+ */
+function planArticleSystemPrompt(catalogue: TagCatalogue): string {
+  return [
+    "You are the script writer and narrator for a nonfiction article read aloud.",
+    "The article was not written to be spoken. Your job is to adapt it into a lively, clear performance for a single narrator.",
+    "Input JSON has two fields: cast (known speakers) and text (a passage).",
+    'Return ONLY a JSON object of the form {"units": [ ... ]}.',
+    "",
+    'Each unit is: { "type": "speech", "speaker": string|null, "emotion": string|null, "pace": "slow"|"normal"|"fast"|null, "pauseAfter": "none"|"short"|"long", "text": string }',
+    "The narrator reads every unit. Use speaker null for narration.",
+    "",
+    "You may adapt the words for the spoken version:",
+    "- Rewrite dense prose into clear spoken language. You may rephrase, tighten and reorder sentences, and split long ones.",
+    "- Keep the meaning and the facts. Do not invent facts, numbers or quotations.",
+    "- Keep the author's own wording where it already works.",
+    "",
+    "Make it a performance, not a flat read:",
+    "- Give it an arc: a confident opening, momentum through the body, a measured close.",
+    "- Every unit with a claim, feeling or a turn MUST carry at least one bracketed cue. A flat read is a failure.",
+    "- Place a cue immediately BEFORE the words it colours, mid-sentence where the voice shifts.",
+    "- Emphasize key terms, names and numbers with [emphasis] just before them.",
+    "- Slow the pace for dense passages, definitions and statistics; speed up for lists and rising energy.",
+    "- Shift tone between sections (curious, serious, wry, urgent) so the read builds and never flattens.",
+    "- Use [break] or [long-break] at section boundaries and before a turn in the argument.",
+    "",
+    "Audio-cue catalogue:",
+    catalogueText(catalogue),
+    ...(catalogue.guidance ?? []),
+    "",
+    "Per unit:",
+    "- emotion: one or two lowercase words for the unit's feeling, or null.",
+    '- pace: "slow" | "normal" | "fast".',
+    "- pauseAfter: the silence to leave after the unit.",
+    "",
+    "Structure:",
+    "- Keep each unit a coherent chunk of a few sentences, not one sentence per unit.",
+    "- Split at natural section boundaries when the passage has them.",
+    "",
+    "Output no text other than the JSON object.",
+  ].join("\n");
+}
+
+function planBookSystemPrompt(catalogue: TagCatalogue): string {
   return [
     "You are the script planner and voice director for an audiobook. You split a passage into render units for a text-to-speech engine, and you direct the performance with inline audio cues.",
     "Input JSON has two fields: cast (known speakers, each with a name and an established register) and text (a passage).",

@@ -4,9 +4,10 @@
  * expressive tagging in the same pass (the model rewrites the text with inline
  * tags), so there is no separate tagging stage.
  *
- * Every plan is checked for word coverage: concatenating every unit's text must
- * reproduce the source passage. If it does not, the chunk falls back to one
- * plain narration unit, so the model can never lose or alter words.
+ * The book path is checked for word coverage: concatenating every unit's text
+ * must reproduce the source passage, or the chunk is split and re-planned. The
+ * article path skips that check: an article is prose rewritten into a performed
+ * script, so the model may adapt the words.
  */
 
 import { findCastMember } from "@/lib/tts/cast";
@@ -15,7 +16,7 @@ import type { Cast, TagCatalogue } from "@/lib/tts/types";
 
 import type { TextChunk } from "./chunk";
 import { chatJson, getIngestModel, isIngestConfigured } from "./llm";
-import { planSystemPrompt, planUserPrompt, type CastBrief } from "./prompt";
+import { planSystemPrompt, planUserPrompt, type CastBrief, type PlanMode } from "./prompt";
 import type { DialogueLine, DialogueUnit, Pace, PauseAfter, RenderUnit, SpeechUnit } from "./types";
 import { hasRenderableText } from "./text";
 
@@ -215,6 +216,7 @@ function unitsText(units: RenderUnit[]): string {
     .join(" ");
 }
 
+/** Exact word coverage: the book path must not drop or alter words. */
 function coverageOk(source: string, units: RenderUnit[]): boolean {
   return normalizeWords(stripTags(unitsText(units))) === normalizeWords(source);
 }
@@ -255,7 +257,7 @@ const MAX_SPLIT_DEPTH = 4;
 async function planText(
   text: string,
   cast: Cast,
-  context: { sessionId: string; catalogue: TagCatalogue; castBrief: CastBrief[]; chunkIdx: number; signal?: AbortSignal; debug?: PlanDebug },
+  context: { sessionId: string; catalogue: TagCatalogue; castBrief: CastBrief[]; chunkIdx: number; mode: PlanMode; signal?: AbortSignal; debug?: PlanDebug },
   depth: number,
 ): Promise<RenderUnit[]> {
   let raw: unknown = null;
@@ -263,7 +265,7 @@ async function planText(
   try {
     raw = await chatJson<unknown>(
       [
-        { role: "system", content: planSystemPrompt(context.catalogue) },
+        { role: "system", content: planSystemPrompt(context.catalogue, context.mode) },
         { role: "user", content: planUserPrompt(text, context.castBrief) },
       ],
       {
@@ -284,6 +286,23 @@ async function planText(
   } catch (error) {
     raw = { error: error instanceof Error ? error.message : String(error) };
     planned = [];
+  }
+
+  // The article path rewrites prose into a performed script. Skip the coverage
+  // guard entirely: no exact-match check, no splitting, and no flat fallback
+  // unless the model returned nothing at all.
+  if (context.mode === "article") {
+    const produced = planned.length > 0;
+    await context.debug?.({
+      chunkIdx: context.chunkIdx,
+      depth,
+      chars: text.length,
+      raw,
+      units: planned,
+      covered: produced,
+      action: produced ? "planned" : "fallback",
+    });
+    return produced ? planned : [speechUnit(text, null, cast, null, null, "short")];
   }
 
   const covered = coverageOk(text, planned);
@@ -307,7 +326,7 @@ async function planText(
 export async function planChapter(
   chunks: TextChunk[],
   cast: Cast,
-  options: { sessionId?: string; signal?: AbortSignal; providerId?: string; debug?: PlanDebug } = {},
+  options: { sessionId?: string; signal?: AbortSignal; providerId?: string; mode?: PlanMode; debug?: PlanDebug } = {},
 ): Promise<RenderUnit[]> {
   if (!isIngestConfigured()) {
     throw new Error("OPENCODE_API_KEY is not set; cannot plan chunks");
@@ -324,7 +343,7 @@ export async function planChapter(
     const planned = await planText(
       chunk.text,
       cast,
-      { sessionId: options.sessionId ?? "plan", catalogue, castBrief, chunkIdx: chunk.idx, signal: options.signal, debug: options.debug },
+      { sessionId: options.sessionId ?? "plan", catalogue, castBrief, chunkIdx: chunk.idx, mode: options.mode ?? "book", signal: options.signal, debug: options.debug },
       0,
     );
     for (const unit of expandUnits(groupDialogue(planned))) {

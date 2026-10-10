@@ -77,6 +77,7 @@ export async function ingestChapter(
   const cast = (await getCast(bookId)) ?? defaultCast();
   const units = await planChapter(chunks, cast, {
     sessionId: `${bookId}:${idx}`,
+    mode: book.kind === "article" ? "article" : "book",
     debug: async (info) => {
       await options.debug?.(info);
       const error = (info.raw as { error?: string })?.error;
