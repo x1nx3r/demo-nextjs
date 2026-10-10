@@ -4,20 +4,36 @@ import { getApp, getApps, initializeApp, type FirebaseApp } from "firebase/app";
 import { getAuth, type Auth } from "firebase/auth";
 
 /**
- * Firebase client. The web config is public by design; access is controlled by
- * Firebase Security Rules and the server session, not by hiding these values.
+ * Firebase web config. Public by design, but injected at runtime by the server
+ * layout so the build does not depend on `NEXT_PUBLIC_*` being present at build
+ * time. Access control lives in the session and Firestore rules, not these values.
  */
-const config = {
-  apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
-  authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN,
-  projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID,
-  storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET,
-  messagingSenderId: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID,
-  appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID,
+export type FirebaseConfig = {
+  apiKey?: string;
+  authDomain?: string;
+  projectId?: string;
+  storageBucket?: string;
+  messagingSenderId?: string;
+  appId?: string;
 };
 
+let configured = false;
+
+/** Idempotent: the first call wins, later calls are ignored. */
+export function configureFirebase(config: FirebaseConfig): void {
+  if (configured || getApps().length > 0) {
+    configured = true;
+    return;
+  }
+  initializeApp(config);
+  configured = true;
+}
+
 export function firebaseApp(): FirebaseApp {
-  return getApps().length ? getApp() : initializeApp(config);
+  if (getApps().length === 0) {
+    throw new Error("Firebase is not configured");
+  }
+  return getApp();
 }
 
 export function firebaseAuth(): Auth {
