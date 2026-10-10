@@ -11,6 +11,7 @@ import {
   Loader2,
   Play,
   Sparkles,
+  Square,
   Wand2,
   XCircle,
 } from "lucide-react";
@@ -94,6 +95,7 @@ export function ChapterWorkbench({
   const [castLoading, setCastLoading] = useState(false);
   const [pool, setPool] = useState<VoiceRef[]>(initialPool);
   const [saving, setSaving] = useState<string | null>(null);
+  const [stopping, setStopping] = useState(false);
 
   const activeRef = useRef(false);
   const logRef = useRef<HTMLDivElement | null>(null);
@@ -199,6 +201,18 @@ export function ChapterWorkbench({
       await refresh();
       void loadCast();
       router.refresh();
+    }
+  }
+
+  async function stopRender() {
+    setStopping(true);
+    try {
+      await fetch(`/api/chapters/${bookId}/${idx}/stop`, { method: "POST" });
+      await refresh();
+    } catch {
+      // best-effort
+    } finally {
+      setStopping(false);
     }
   }
 
@@ -343,6 +357,13 @@ export function ChapterWorkbench({
           <Button variant="secondary" disabled className="gap-1.5">
             <Loader2 className="size-4 animate-spin" />
             Rendering…
+          </Button>
+        ) : null}
+
+        {busy === "convert" || status === "converting" || (job?.running === true && job.phase === "rendering") ? (
+          <Button variant="outline" className="gap-1.5" disabled={stopping} onClick={stopRender}>
+            {stopping ? <Loader2 className="size-4 animate-spin" /> : <Square className="size-3.5 fill-current" />}
+            {stopping ? "Stopping…" : "Stop"}
           </Button>
         ) : null}
 

@@ -69,6 +69,23 @@ export type ConvertResult = {
   error?: string;
 };
 
+/**
+ * Active conversions, keyed by book and chapter. A stop request flips the flag;
+ * the running loop then ends after the units already in flight and checkpoints.
+ * In-memory is enough because the app runs as a single instance.
+ */
+type ConversionControl = { stop: boolean };
+const activeConversions = new Map<string, ConversionControl>();
+const conversionKey = (bookId: string, idx: number) => `${bookId}:${idx}`;
+
+/** Ask a running conversion to stop. Returns false when none is active. */
+export function requestStop(bookId: string, idx: number): boolean {
+  const control = activeConversions.get(conversionKey(bookId, idx));
+  if (!control) return false;
+  control.stop = true;
+  return true;
+}
+
 export async function convertChapter(
   bookId: string,
   idx: number,
@@ -141,6 +158,10 @@ export async function convertChapter(
   );
   await patchChapter(bookId, idx, { status: "converting", unitCount: total, unitsDone: done });
 
+  const control: ConversionControl = { stop: false };
+  const controlKey = conversionKey(bookId, idx);
+  activeConversions.set(controlKey, control);
+
   function unitLength(unit: RenderUnit): number {
     return unit.type === "speech"
       ? unit.text.length
@@ -183,101 +204,117 @@ export async function convertChapter(
     return { bookId, idx, status: "partial", done, total, characters, error: message };
   };
 
-  if (concurrency <= 1) {
-    // Sequential path (stitching providers). Reconstruct the stitch context
-    // from the last rendered unit before the gap.
-    let previousRequestIds: string[] = [];
-    const firstPending = units.findIndex((unit) => !unit.audio);
-    if (firstPending > 0) {
-      const previous = units[firstPending - 1].requestId;
-      if (previous) previousRequestIds = [previous];
-    }
+  const stopResult = async (): Promise<ConvertResult> => {
+    await logEvent(job, "info", "Stopped by user");
+    await setProgress(job, { phase: "idle", running: false, done, total, chars: characters });
+    await putChapterScript(bookId, idx, script);
+    await patchChapter(bookId, idx, { status: done > 0 ? "partial" : "ingested", unitsDone: done });
+    return { bookId, idx, status: "partial", done, total, characters };
+  };
 
-    for (let i = 0; i < total; i++) {
-      const unit = units[i];
-      if (unit.audio) {
-        options.debug?.({ kind: "skip", id: unit.id, type: unit.type });
-        continue;
+  try {
+    if (concurrency <= 1) {
+      // Sequential path (stitching providers). Reconstruct the stitch context
+      // from the last rendered unit before the gap.
+      let previousRequestIds: string[] = [];
+      const firstPending = units.findIndex((unit) => !unit.audio);
+      if (firstPending > 0) {
+        const previous = units[firstPending - 1].requestId;
+        if (previous) previousRequestIds = [previous];
       }
 
-      try {
-        const result = await renderUnit(unit, cast, {
-          providerId: options.providerId,
-          previousRequestIds,
-        });
-        await record(unit, result);
-        if (result.requestId) previousRequestIds = [result.requestId];
-      } catch (error) {
-        return await markPartial(error, unit);
-      }
-
-      if (done % CHECKPOINT_EVERY === 0) {
-        await putChapterScript(bookId, idx, script);
-      }
-    }
-  } else {
-    // Bounded pool (Fish). Renders run at once; store writes are serialized so
-    // the job log, progress and checkpoints cannot race.
-    let cursor = 0;
-    let stopped = false;
-    const state: { failure: { error: unknown; unit: RenderUnit } | null } = { failure: null };
-
-    let tail: Promise<unknown> = Promise.resolve();
-    const serialize = (fn: () => Promise<void>): Promise<void> => {
-      const run = tail.then(fn, fn);
-      tail = run.then(
-        () => undefined,
-        () => undefined,
-      );
-      return run;
-    };
-
-    const worker = async (): Promise<void> => {
-      while (!stopped) {
-        const i = cursor++;
-        if (i >= total) return;
-
+      for (let i = 0; i < total; i++) {
+        if (control.stop) break;
         const unit = units[i];
         if (unit.audio) {
           options.debug?.({ kind: "skip", id: unit.id, type: unit.type });
           continue;
         }
 
-        let result: RenderedUnit;
         try {
-          result = await renderUnit(unit, cast, { providerId: options.providerId });
+          const result = await renderUnit(unit, cast, {
+            providerId: options.providerId,
+            previousRequestIds,
+          });
+          await record(unit, result);
+          if (result.requestId) previousRequestIds = [result.requestId];
         } catch (error) {
-          if (!stopped) {
-            stopped = true;
-            state.failure = { error, unit };
-          }
-          return;
+          return await markPartial(error, unit);
         }
 
-        await serialize(async () => {
-          if (unit.audio) return;
-          await record(unit, result);
-          if (done % CHECKPOINT_EVERY === 0) {
-            await putChapterScript(bookId, idx, script);
-          }
-        });
+        if (done % CHECKPOINT_EVERY === 0) {
+          await putChapterScript(bookId, idx, script);
+        }
       }
-    };
 
-    await Promise.all(Array.from({ length: Math.min(concurrency, total) }, () => worker()));
-    await tail;
+      if (control.stop) return await stopResult();
+    } else {
+      // Bounded pool (Fish). Renders run at once; store writes are serialized so
+      // the job log, progress and checkpoints cannot race.
+      let cursor = 0;
+      let stopped = false;
+      const state: { failure: { error: unknown; unit: RenderUnit } | null } = { failure: null };
 
-    if (state.failure) {
-      return await markPartial(state.failure.error, state.failure.unit);
+      let tail: Promise<unknown> = Promise.resolve();
+      const serialize = (fn: () => Promise<void>): Promise<void> => {
+        const run = tail.then(fn, fn);
+        tail = run.then(
+          () => undefined,
+          () => undefined,
+        );
+        return run;
+      };
+
+      const worker = async (): Promise<void> => {
+        while (!stopped && !control.stop) {
+          const i = cursor++;
+          if (i >= total) return;
+
+          const unit = units[i];
+          if (unit.audio) {
+            options.debug?.({ kind: "skip", id: unit.id, type: unit.type });
+            continue;
+          }
+
+          let result: RenderedUnit;
+          try {
+            result = await renderUnit(unit, cast, { providerId: options.providerId });
+          } catch (error) {
+            if (!stopped) {
+              stopped = true;
+              state.failure = { error, unit };
+            }
+            return;
+          }
+
+          await serialize(async () => {
+            if (unit.audio) return;
+            await record(unit, result);
+            if (done % CHECKPOINT_EVERY === 0) {
+              await putChapterScript(bookId, idx, script);
+            }
+          });
+        }
+      };
+
+      await Promise.all(Array.from({ length: Math.min(concurrency, total) }, () => worker()));
+      await tail;
+
+      if (control.stop) return await stopResult();
+      if (state.failure) {
+        return await markPartial(state.failure.error, state.failure.unit);
+      }
     }
+
+    await putChapterScript(bookId, idx, script);
+    await patchChapter(bookId, idx, { status: "ready", unitsDone: done });
+    await setProgress(job, { phase: "idle", running: false, done, total, chars: characters });
+    await logEvent(job, "info", `Ready · ${total} units · ${characters} chars`);
+
+    return { bookId, idx, status: "ready", done, total, characters };
+  } finally {
+    activeConversions.delete(controlKey);
   }
-
-  await putChapterScript(bookId, idx, script);
-  await patchChapter(bookId, idx, { status: "ready", unitsDone: done });
-  await setProgress(job, { phase: "idle", running: false, done, total, chars: characters });
-  await logEvent(job, "info", `Ready · ${total} units · ${characters} chars`);
-
-  return { bookId, idx, status: "ready", done, total, characters };
 }
 
 export { isQuotaError };
