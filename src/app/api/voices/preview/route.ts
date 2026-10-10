@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 
-import { getSession } from "@/lib/auth";
+import { gateSession } from "@/lib/auth";
 import { getProvider } from "@/lib/tts/providers";
 
 export const runtime = "nodejs";
@@ -13,8 +13,12 @@ const SAMPLE = "[calm] The rain had not stopped for three days.";
  * before assigning. Uses the active TTS provider.
  */
 export async function POST(request: Request) {
-  if (!(await getSession())) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const gate = await gateSession();
+  if (!gate.ok) {
+    return NextResponse.json(
+      { error: gate.status === 401 ? "Unauthorized" : "Access denied" },
+      { status: gate.status },
+    );
   }
 
   let body: { voiceId?: unknown; text?: unknown };

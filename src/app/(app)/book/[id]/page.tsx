@@ -1,10 +1,12 @@
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { BookText } from "lucide-react";
 
 import { ChapterList } from "@/components/chapters/chapter-list";
 import { PlayBookButton } from "@/components/chapters/play-book-button";
+import { getSession } from "@/lib/auth";
 import { formatAuthors, formatChars } from "@/lib/format";
 import { getBook } from "@/lib/store/books";
+import { setTenant } from "@/lib/tenant";
 
 export const dynamic = "force-dynamic";
 
@@ -13,6 +15,10 @@ export default async function BookPage({
 }: {
   params: Promise<{ id: string }>;
 }) {
+  const session = await getSession();
+  if (!session) redirect("/login");
+  setTenant(session.uid);
+
   const { id } = await params;
   const book = await getBook(id);
   if (!book) notFound();

@@ -1,7 +1,9 @@
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 
 import { NowPlaying } from "@/components/player/now-playing";
+import { getSession } from "@/lib/auth";
 import { getBook } from "@/lib/store/books";
+import { setTenant } from "@/lib/tenant";
 
 export const dynamic = "force-dynamic";
 
@@ -10,6 +12,10 @@ export default async function PlayPage({
 }: {
   params: Promise<{ id: string; idx: string }>;
 }) {
+  const session = await getSession();
+  if (!session) redirect("/login");
+  setTenant(session.uid);
+
   const { id, idx } = await params;
   const chapterIdx = Number.parseInt(idx, 10);
   if (!Number.isInteger(chapterIdx) || chapterIdx < 0) notFound();

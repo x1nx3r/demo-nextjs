@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { getCast, putCast, resolveVoicePool } from "@/lib/tts/cast";
 import { invalidateVoiceUnits } from "@/lib/tts/reassign";
+import { setTenant } from "@/lib/tenant";
 
 export const runtime = "nodejs";
 
@@ -10,9 +11,11 @@ type RouteParams = { params: Promise<{ id: string }> };
 
 /** The append-only cast for a book, plus the pool available for reassignment. */
 export async function GET(_request: Request, { params }: RouteParams) {
-  if (!(await getSession())) {
+  const session = await getSession();
+  if (!session) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
+  setTenant(session.uid);
 
   const { id } = await params;
   const cast = await getCast(id);
@@ -24,9 +27,11 @@ export async function GET(_request: Request, { params }: RouteParams) {
  * override: it also invalidates already-rendered units that used the old voice.
  */
 export async function PATCH(request: Request, { params }: RouteParams) {
-  if (!(await getSession())) {
+  const session = await getSession();
+  if (!session) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
+  setTenant(session.uid);
 
   const { id } = await params;
   let body: { target?: unknown; voiceId?: unknown };

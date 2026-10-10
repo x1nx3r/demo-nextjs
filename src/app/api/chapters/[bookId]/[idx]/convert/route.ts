@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
 
-import { getSession } from "@/lib/auth";
+import { gateSession } from "@/lib/auth";
 import { ConvertError, convertChapter } from "@/lib/tts/convert";
+import { setTenant } from "@/lib/tenant";
 
 export const runtime = "nodejs";
 export const maxDuration = 300;
@@ -14,9 +15,14 @@ type RouteParams = { params: Promise<{ bookId: string; idx: string }> };
  * the run is checkpointed, so a follow-up call resumes.
  */
 export async function POST(_request: Request, { params }: RouteParams) {
-  if (!(await getSession())) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const gate = await gateSession();
+  if (!gate.ok) {
+    return NextResponse.json(
+      { error: gate.status === 401 ? "Unauthorized" : "Access denied" },
+      { status: gate.status },
+    );
   }
+  setTenant(gate.session.uid);
 
   const { bookId, idx } = await params;
   const index = Number.parseInt(idx, 10);

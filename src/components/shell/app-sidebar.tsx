@@ -1,20 +1,38 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
+import { signOut } from "firebase/auth";
 import { Headphones, Library, LogOut } from "lucide-react";
 import { cn } from "cn";
 
-import { logout } from "@/app/(app)/actions";
 import { Button } from "@/components/ui/button";
+import { firebaseAuth } from "@/lib/firebase/client";
 
 import type { ShellBook } from "./app-shell";
 import { useSearch } from "./search-context";
 
 export function AppSidebar({ books, collapsed }: { books: ShellBook[]; collapsed: boolean }) {
   const pathname = usePathname();
+  const router = useRouter();
   const { query } = useSearch();
   const q = query.trim().toLowerCase();
+
+  async function handleSignOut() {
+    try {
+      await signOut(firebaseAuth());
+    } catch {
+      // Ignore: the session cookie is cleared below regardless.
+    }
+    try {
+      await fetch("/api/auth/session", { method: "DELETE" });
+    } catch {
+      // Ignore: navigation still sends the user to the login page.
+    }
+    router.push("/login");
+    router.refresh();
+  }
+
   const list = q
     ? books.filter(
         (book) =>
@@ -116,18 +134,17 @@ export function AppSidebar({ books, collapsed }: { books: ShellBook[]; collapsed
       </div>
 
       <div className={cn("border-t border-border", collapsed ? "p-2" : "p-3")}>
-        <form action={logout}>
-          <Button
-            type="submit"
-            variant="ghost"
-            size={collapsed ? "icon" : "sm"}
-            title="Sign out"
-            aria-label="Sign out"
-            className={cn(collapsed ? "" : "w-full justify-start gap-2")}
-          >
-            {collapsed ? <LogOut className="size-4" /> : "Sign out"}
-          </Button>
-        </form>
+        <Button
+          type="button"
+          variant="ghost"
+          size={collapsed ? "icon" : "sm"}
+          title="Sign out"
+          aria-label="Sign out"
+          onClick={handleSignOut}
+          className={cn(collapsed ? "" : "w-full justify-start gap-2")}
+        >
+          {collapsed ? <LogOut className="size-4" /> : "Sign out"}
+        </Button>
       </div>
     </aside>
   );

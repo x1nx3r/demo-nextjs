@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { getBook } from "@/lib/store/books";
 import { getChapterScript } from "@/lib/store/chunks";
+import { setTenant } from "@/lib/tenant";
 
 export const runtime = "nodejs";
 
@@ -10,9 +11,11 @@ type RouteParams = { params: Promise<{ bookId: string; idx: string }> };
 
 /** Chapter detail: metadata plus the planned script (render units). */
 export async function GET(_request: Request, { params }: RouteParams) {
-  if (!(await getSession())) {
+  const session = await getSession();
+  if (!session) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
+  setTenant(session.uid);
 
   const { bookId, idx } = await params;
   const index = Number.parseInt(idx, 10);

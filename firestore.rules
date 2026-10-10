@@ -1,0 +1,10 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // All Firestore access goes through the server (Firebase Admin SDK).
+    // The browser uses Firebase Auth only, never Firestore directly.
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

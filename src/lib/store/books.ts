@@ -1,16 +1,17 @@
 import { randomUUID } from "node:crypto";
 
 import { fetchArticle, fetchArticleImage, parseArticle } from "@/lib/sources/article";
-import { parseSource, sourceContentType, sourceExtension } from "@/lib/sources/parse";
+import { defaultBookKind, parseSource, sourceContentType, sourceExtension } from "@/lib/sources/parse";
 import type { ParsedBook, ParsedParagraph } from "@/lib/epub/parse";
 import {
   bookContextKey,
   bookCoverKey,
   bookDirectionKey,
   bookMetaKey,
+  bookPrefix,
   bookSourceKey,
   chapterTextKey,
-  LIBRARY_PREFIX,
+  libraryPrefix,
 } from "@/lib/storage/keys";
 
 import { listKeys } from "@/lib/storage/s3";
@@ -56,8 +57,11 @@ export type ChapterText = {
 };
 
 export async function listBooks(): Promise<BookMeta[]> {
-  const keys = await listKeys(LIBRARY_PREFIX);
-  const metaKeys = keys.filter((key) => /^books\/[^/]+\/meta\.json$/.test(key));
+  const prefix = libraryPrefix();
+  const keys = await listKeys(prefix);
+  const metaKeys = keys.filter((key) =>
+    /^[^/]+\/meta\.json$/.test(key.slice(prefix.length)),
+  );
   const books = await Promise.all(
     metaKeys.map((key) => getJson<BookMeta>(key)),
   );
@@ -127,7 +131,7 @@ export async function createBookFromSource(
   }
   await writeBookTexts(id, context, direction);
 
-  return storeParsed(id, parsed, "book", parsed.cover);
+  return storeParsed(id, parsed, defaultBookKind(filename), parsed.cover);
 }
 
 /** Fetch a URL, extract the article, and store it as a one-chapter "article". */
@@ -199,5 +203,5 @@ async function storeParsed(
 }
 
 export async function deleteBook(id: string): Promise<void> {
-  await deletePrefix(`books/${id}/`);
+  await deletePrefix(bookPrefix(id));
 }

@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 
 import { getSession } from "@/lib/auth";
 import { getJob } from "@/lib/store/jobs";
+import { setTenant } from "@/lib/tenant";
 
 export const runtime = "nodejs";
 
@@ -9,9 +10,11 @@ type RouteParams = { params: Promise<{ bookId: string; idx: string }> };
 
 /** Poll target for the chapter workbench: phase, progress and the live log. */
 export async function GET(_request: Request, { params }: RouteParams) {
-  if (!(await getSession())) {
+  const session = await getSession();
+  if (!session) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
+  setTenant(session.uid);
 
   const { bookId, idx } = await params;
   const index = Number.parseInt(idx, 10);

@@ -4,6 +4,7 @@ import { getSession } from "@/lib/auth";
 import type { NowPlayingData, PlayableUnit } from "@/lib/player/types";
 import { getBook } from "@/lib/store/books";
 import { getChapterScript } from "@/lib/store/chunks";
+import { setTenant } from "@/lib/tenant";
 
 export const runtime = "nodejs";
 
@@ -11,9 +12,11 @@ type RouteParams = { params: Promise<{ bookId: string; idx: string }> };
 
 /** Playable units for one chapter, plus the ready-chapter prev/next indices. */
 export async function GET(_request: Request, { params }: RouteParams) {
-  if (!(await getSession())) {
+  const session = await getSession();
+  if (!session) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
+  setTenant(session.uid);
 
   const { bookId, idx } = await params;
   const chapterIdx = Number.parseInt(idx, 10);

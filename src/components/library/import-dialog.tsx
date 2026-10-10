@@ -136,14 +136,14 @@ export function ImportDialog({ open, onClose }: { open: boolean; onClose: () => 
         >
           <UploadCloud className={cn("size-6", dragging ? "text-brand" : "text-text-secondary")} />
           <span className="text-sm">
-            {file ? file.name : "Drop an EPUB, TXT, or Markdown file here, or click to browse"}
+            {file ? file.name : "Drop an EPUB, TXT, Markdown, or PDF file here, or click to browse"}
           </span>
-          <span className="text-xs text-text-secondary">.epub · .txt · .md</span>
+          <span className="text-xs text-text-secondary">.epub · .txt · .md · .pdf</span>
         </button>
         <input
           ref={inputRef}
           type="file"
-          accept=".epub,.txt,.md,.markdown,application/epub+zip,text/plain,text/markdown"
+          accept=".epub,.txt,.md,.markdown,.pdf,application/epub+zip,text/plain,text/markdown,application/pdf"
           className="hidden"
           onChange={(event) => pick(event.target.files)}
         />

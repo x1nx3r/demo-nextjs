@@ -1,9 +1,11 @@
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 
 import { ChapterWorkbench } from "@/components/chapters/chapter-workbench";
+import { getSession } from "@/lib/auth";
 import { getBook } from "@/lib/store/books";
 import { getChapterScript } from "@/lib/store/chunks";
 import { getJob } from "@/lib/store/jobs";
+import { setTenant } from "@/lib/tenant";
 import { getCast, resolveVoicePool } from "@/lib/tts/cast";
 
 export const dynamic = "force-dynamic";
@@ -13,6 +15,10 @@ export default async function ChapterPage({
 }: {
   params: Promise<{ id: string; idx: string }>;
 }) {
+  const session = await getSession();
+  if (!session) redirect("/login");
+  setTenant(session.uid);
+
   const { id, idx } = await params;
   const index = Number.parseInt(idx, 10);
   if (!Number.isInteger(index) || index < 0) notFound();

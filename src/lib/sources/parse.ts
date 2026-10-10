@@ -6,15 +6,18 @@
 
 import { parseEpub, type ParsedBook } from "@/lib/epub/parse";
 
+import { parsePdf } from "./pdf";
 import { parseText } from "./text";
 
 export type { ParsedBook, ParsedChapter, ParsedParagraph } from "@/lib/epub/parse";
 
-export type SourceKind = "epub" | "text";
+export type SourceKind = "epub" | "text" | "pdf";
 
 export function sourceKind(filename: string): SourceKind {
   const ext = filename.toLowerCase().split(".").pop() ?? "";
-  return ext === "txt" || ext === "md" || ext === "markdown" ? "text" : "epub";
+  if (ext === "txt" || ext === "md" || ext === "markdown") return "text";
+  if (ext === "pdf") return "pdf";
+  return "epub";
 }
 
 export function sourceExtension(filename: string): string {
@@ -23,9 +26,21 @@ export function sourceExtension(filename: string): string {
 }
 
 export function sourceContentType(filename: string): string {
-  return sourceKind(filename) === "text" ? "text/plain; charset=utf-8" : "application/epub+zip";
+  const kind = sourceKind(filename);
+  if (kind === "text") return "text/plain; charset=utf-8";
+  if (kind === "pdf") return "application/pdf";
+  return "application/epub+zip";
+}
+
+/** A PDF is a single narrated piece; a book file is a multi-chapter work. */
+export function defaultBookKind(filename: string): "book" | "article" {
+  return sourceKind(filename) === "pdf" ? "article" : "book";
 }
 
 export async function parseSource(data: Uint8Array, filename: string): Promise<ParsedBook> {
-  return sourceKind(filename) === "text" ? parseText(data, filename) : parseEpub(data);
+  const kind = sourceKind(filename);
+  if (kind === "text") return parseText(data, filename);
+  // pdfjs detaches the input ArrayBuffer, so give it a copy.
+  if (kind === "pdf") return parsePdf(data.slice(), filename);
+  return parseEpub(data);
 }

@@ -1,13 +1,20 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { BookPlus, FileText } from "lucide-react";
 
 import { BookGrid } from "@/components/library/book-grid";
+import { getSession } from "@/lib/auth";
 import { formatChars } from "@/lib/format";
 import { listBooks } from "@/lib/store/books";
+import { setTenant } from "@/lib/tenant";
 
 export const dynamic = "force-dynamic";
 
 export default async function LibraryPage() {
+  const session = await getSession();
+  if (!session) redirect("/login");
+  setTenant(session.uid);
+
   const items = await listBooks();
   const works = items.filter((book) => book.kind !== "article");
   const articles = items.filter((book) => book.kind === "article");

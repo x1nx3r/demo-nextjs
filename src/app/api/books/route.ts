@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { resolveReferenceContext } from "@/lib/reference";
 import { createBookFromArticle, createBookFromSource, listBooks } from "@/lib/store/books";
+import { setTenant } from "@/lib/tenant";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -17,17 +18,21 @@ async function resolveContextField(
 }
 
 export async function GET() {
-  if (!(await getSession())) {
+  const session = await getSession();
+  if (!session) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
+  setTenant(session.uid);
 
   return NextResponse.json({ books: await listBooks() });
 }
 
 export async function POST(request: Request) {
-  if (!(await getSession())) {
+  const session = await getSession();
+  if (!session) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
+  setTenant(session.uid);
 
   let form: FormData;
   try {

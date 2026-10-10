@@ -1,6 +1,7 @@
 import { getSession } from "@/lib/auth";
 import { audioKey } from "@/lib/storage/keys";
 import { getBytes } from "@/lib/store/objects";
+import { setTenant } from "@/lib/tenant";
 
 export const runtime = "nodejs";
 
@@ -11,9 +12,11 @@ type RouteParams = { params: Promise<{ hash: string }> };
  * seeking. Keys are content hashes, so responses are immutable and cacheable.
  */
 export async function GET(request: Request, { params }: RouteParams) {
-  if (!(await getSession())) {
+  const session = await getSession();
+  if (!session) {
     return new Response("Unauthorized", { status: 401 });
   }
+  setTenant(session.uid);
 
   const { hash } = await params;
   if (!/^[a-f0-9]{64}$/.test(hash)) {

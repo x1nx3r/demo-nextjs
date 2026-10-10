@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
 
-import { getSession } from "@/lib/auth";
+import { gateSession } from "@/lib/auth";
 import { IngestError, ingestChapter } from "@/lib/ingest";
+import { setTenant } from "@/lib/tenant";
 
 export const runtime = "nodejs";
 export const maxDuration = 300;
@@ -15,9 +16,14 @@ async function resolve(params: RouteParams["params"]) {
 }
 
 export async function POST(_request: Request, { params }: RouteParams) {
-  if (!(await getSession())) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const gate = await gateSession();
+  if (!gate.ok) {
+    return NextResponse.json(
+      { error: gate.status === 401 ? "Unauthorized" : "Access denied" },
+      { status: gate.status },
+    );
   }
+  setTenant(gate.session.uid);
 
   const { bookId, index, valid } = await resolve(params);
   if (!valid) {

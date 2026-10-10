@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { GoogleAuthProvider, signInWithPopup } from "firebase/auth";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -11,38 +12,37 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+import { firebaseAuth } from "@/lib/firebase/client";
+
+function errorMessage(error: unknown): string {
+  const code = (error as { code?: string } | null)?.code ?? "";
+  if (code.includes("popup-closed-by-user")) return "The sign-in popup was closed.";
+  if (code.includes("popup-blocked")) return "Your browser blocked the sign-in popup.";
+  if (code.includes("operation-not-allowed")) return "Google sign-in is not enabled.";
+  return "Something went wrong. Try again.";
+}
 
 export default function LoginPage() {
   const router = useRouter();
-  const [username, setUsername] = useState("");
-  const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
 
-  async function onSubmit(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault();
+  async function onGoogle() {
     setPending(true);
     setError(null);
-
     try {
-      const response = await fetch("/api/auth/login", {
+      const result = await signInWithPopup(firebaseAuth(), new GoogleAuthProvider());
+      const idToken = await result.user.getIdToken();
+      const response = await fetch("/api/auth/session", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ username, password }),
+        body: JSON.stringify({ idToken }),
       });
-
-      if (!response.ok) {
-        setError("Invalid username or password.");
-        setPending(false);
-        return;
-      }
-
+      if (!response.ok) throw new Error("Could not start your session.");
       router.push("/");
       router.refresh();
-    } catch {
-      setError("Something went wrong. Try again.");
+    } catch (err) {
+      setError(errorMessage(err));
       setPending(false);
     }
   }
@@ -57,45 +57,18 @@ export default function LoginPage() {
       <Card>
         <CardHeader>
           <CardTitle>Sign in</CardTitle>
-          <CardDescription>Enter your credentials.</CardDescription>
+          <CardDescription>Continue with your Google account.</CardDescription>
         </CardHeader>
-        <CardContent>
-          <form onSubmit={onSubmit} className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="username">Username</Label>
-              <Input
-                id="username"
-                name="username"
-                autoComplete="username"
-                value={username}
-                onChange={(event) => setUsername(event.target.value)}
-                required
-              />
-            </div>
+        <CardContent className="space-y-4">
+          <Button type="button" className="w-full" onClick={onGoogle} disabled={pending}>
+            {pending ? "Signing in..." : "Continue with Google"}
+          </Button>
 
-            <div className="space-y-2">
-              <Label htmlFor="password">Password</Label>
-              <Input
-                id="password"
-                name="password"
-                type="password"
-                autoComplete="current-password"
-                value={password}
-                onChange={(event) => setPassword(event.target.value)}
-                required
-              />
-            </div>
-
-            {error ? (
-              <p className="text-sm text-destructive" role="alert">
-                {error}
-              </p>
-            ) : null}
-
-            <Button type="submit" className="w-full" disabled={pending}>
-              {pending ? "Signing in..." : "Sign in"}
-            </Button>
-          </form>
+          {error ? (
+            <p className="text-sm text-destructive" role="alert">
+              {error}
+            </p>
+          ) : null}
         </CardContent>
       </Card>
     </main>

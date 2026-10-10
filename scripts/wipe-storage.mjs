@@ -3,8 +3,8 @@
  * DESTRUCTIVE. Delete all app data from RustFS.
  *
  * Usage (from demo-nextjs/):
- *   node scripts/wipe-storage.mjs                 # books, jobs, cache, settings
- *   node scripts/wipe-storage.mjs books/ jobs/    # explicit prefixes
+ *   node scripts/wipe-storage.mjs                 # users, settings
+ *   node scripts/wipe-storage.mjs users/          # explicit prefixes
  *
  * Reads RustFS credentials from .env.local.
  */
@@ -42,7 +42,7 @@ async function listAll(Prefix) {
 }
 
 const prefixes = process.argv.slice(2);
-if (prefixes.length === 0) prefixes.push("books/", "jobs/", "cache/", "settings.json");
+if (prefixes.length === 0) prefixes.push("users/", "settings.json");
 
 let total = 0;
 for (const prefix of prefixes) {
