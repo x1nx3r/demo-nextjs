@@ -2,8 +2,9 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
+import Image from "next/image";
 import { signOut } from "firebase/auth";
-import { Headphones, Library, LogOut } from "lucide-react";
+import { Library, LogOut } from "lucide-react";
 import { cn } from "cn";
 
 import { Button } from "@/components/ui/button";
@@ -52,7 +53,13 @@ export function AppSidebar({ books, collapsed }: { books: ShellBook[]; collapsed
         href="/library"
         className={cn("flex items-center gap-2 py-5", collapsed ? "justify-center px-2" : "px-5")}
       >
-        <Headphones className="size-6 shrink-0 text-brand" />
+        <Image
+          src="/chattypub.png"
+          alt=""
+          width={32}
+          height={32}
+          className="size-8 shrink-0 object-contain"
+        />
         {collapsed ? null : (
           <span className="font-heading text-lg font-bold tracking-tight">ChattyPub</span>
         )}

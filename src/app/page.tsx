@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import Image from "next/image";
 import { redirect } from "next/navigation";
 import {
   BookOpen,
@@ -78,7 +79,14 @@ export default async function LandingPage() {
       <header className="sticky top-0 z-20 border-b border-border/40 bg-background/70 backdrop-blur-md">
         <div className="mx-auto flex h-16 w-full max-w-6xl items-center gap-3 px-6">
           <Link href="/" className="flex items-center gap-2">
-            <Headphones className="size-6 text-brand" />
+            <Image
+              src="/chattypub.png"
+              alt=""
+              width={32}
+              height={32}
+              className="size-8 object-contain"
+              priority
+            />
             <span className="font-heading text-lg font-bold tracking-tight">ChattyPub</span>
           </Link>
 
@@ -280,7 +288,7 @@ export default async function LandingPage() {
       <footer className="relative z-10 border-t border-border/40">
         <div className="mx-auto flex w-full max-w-6xl flex-col items-center justify-between gap-3 px-6 py-8 text-sm text-text-secondary sm:flex-row">
           <div className="flex items-center gap-2">
-            <Headphones className="size-4 text-brand" />
+            <Image src="/chattypub.png" alt="" width={20} height={20} className="size-5 object-contain" />
             <span>ChattyPub</span>
           </div>
           <p>A personal project. Bring your own provider keys.</p>

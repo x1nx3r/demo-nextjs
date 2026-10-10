@@ -15,6 +15,10 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "ChattyPub",
   description: "ChattyPub turns EPUBs into context-aware audiobooks.",
+  icons: {
+    icon: "/chattypub.png",
+    apple: "/chattypub.png",
+  },
 };
 
 export const viewport: Viewport = {

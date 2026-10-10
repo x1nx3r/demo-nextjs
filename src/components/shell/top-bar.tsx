@@ -2,8 +2,9 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import Image from "next/image";
 import { usePathname, useRouter } from "next/navigation";
-import { ArrowLeft, BookPlus, Headphones, PanelLeft, Search } from "lucide-react";
+import { ArrowLeft, BookPlus, PanelLeft, Search } from "lucide-react";
 
 import { ImportDialog } from "@/components/library/import-dialog";
 import { Button } from "@/components/ui/button";
@@ -42,7 +43,7 @@ export function TopBar({
       ) : null}
 
       <Link href="/library" className="flex shrink-0 items-center md:hidden" aria-label="ChattyPub home">
-        <Headphones className="size-6 text-brand" />
+        <Image src="/chattypub.png" alt="ChattyPub" width={28} height={28} className="size-7 object-contain" />
       </Link>
 
       <div className="relative w-full max-w-md">

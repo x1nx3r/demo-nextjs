@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { GoogleAuthProvider, signInWithPopup } from "firebase/auth";
 
@@ -49,9 +50,19 @@ export default function LoginPage() {
 
   return (
     <main className="mx-auto flex min-h-dvh w-full max-w-sm flex-col justify-center gap-6 px-6 py-10">
-      <div className="space-y-1 text-center">
-        <h1 className="font-heading text-2xl font-semibold">ChattyPub</h1>
-        <p className="text-sm text-muted-foreground">Sign in to continue.</p>
+      <div className="flex flex-col items-center gap-3">
+        <Image
+          src="/chattypub.png"
+          alt="ChattyPub"
+          width={80}
+          height={80}
+          className="size-20 object-contain"
+          priority
+        />
+        <div className="space-y-1 text-center">
+          <h1 className="font-heading text-2xl font-semibold">ChattyPub</h1>
+          <p className="text-sm text-muted-foreground">Sign in to continue.</p>
+        </div>
       </div>
 
       <Card>
